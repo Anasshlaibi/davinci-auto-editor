@@ -160,6 +160,116 @@ rather than just fetching the webpage:
   throughout. When a GitHub-hosted binary download is flaky, check PyPI for
   an equivalent package first before fighting the download.
 
+## Processing footage that lives under ~/Downloads (or Desktop/Documents)
+
+**The single biggest gotcha found doing real editing work (2026-08-04).** macOS
+protects Downloads/Desktop/Documents at the OS level (TCC), independent of any
+Claude Code sandbox setting. This means:
+
+- `ffmpeg`, `whisper`, `dd`, `cp` — **any** subprocess spawned from the Bash
+  tool — gets `Operation not permitted` trying to read file *content* from
+  those folders, even though `ls`/`stat`/`test -f` on the same path succeed
+  (directory listing and content read are different TCC permissions).
+  `dangerouslyDisableSandbox: true` does **not** fix this — it's macOS's OS
+  sandbox, not Claude Code's.
+- Claude Code's own `Read` tool (and DaVinci Resolve's app process, and the
+  Resolve MCP bridge acting through it) are **not** affected — they can read
+  the same file fine. So `media_storage.import_to_pool`,
+  `media_pool_item.get_clip_property`, etc. all work directly on a clip still
+  sitting in `~/Downloads`.
+- But anything the MCP server shells out for — `media_pool_item.extract_frames`
+  (uses ffmpeg), `media_pool_item.transcribe_audio` (Resolve's native
+  transcription — this one fails **instantly and silently**,
+  `{"success": false}`, no error text, when the source is in a protected
+  folder; same call works once the file lives somewhere else) — fails the
+  same way ffmpeg does directly.
+- **Workaround that works**: render the clip (or just the piece you need) out
+  of Resolve to an accessible location first — `render.prepare_render_job` +
+  `render.start` (NOT `render.quick_export`/`safe_quick_export`, which pops a
+  UI dialog and throws `bridge_timeout: Resolve did not answer in time` from
+  the MCP side — the low-level render-queue API doesn't have this problem).
+  Once the render lands outside the protected folder, `ffmpeg`/`whisper`/
+  Resolve's own `transcribe_audio` all work on it normally.
+- Corollary: any media you generate this way (corrected audio, transcripts,
+  etc.) that a **persistent** Resolve project will keep referencing must be
+  moved out of the session scratchpad (`/private/tmp/claude-*/.../scratchpad`)
+  before the session ends — that directory is not guaranteed to survive, and
+  the Resolve project just stores a file path, not the media itself. Convention
+  adopted: `~/Movies/<project-name>-video-production/` as the permanent home
+  for generated (not raw-source) audio/video assets tied to a specific edit.
+
+## Color grading API gotcha
+
+- `timeline_item_color.safe_set_cdl` **validates successfully but silently
+  fails to apply** — returns `{"success": false}` with no error, even though
+  `dry_run: true` on the identical params reports `valid: true`. Confirmed by
+  checking `grade_evidence_base` before/after: no node tools added.
+- **Fix**: use the raw `set_cdl` action instead, with the exact string-keyed
+  shape the validator's `normalized` field shows (`NodeIndex`, `Slope`,
+  `Offset`, `Power`, `Saturation` as space-separated `"r g b"` strings, not
+  the friendlier `slope`/`offset`/`power` array shape `safe_set_cdl` accepts).
+  Worth re-testing `safe_set_cdl` next time in case it's fixed upstream before
+  reaching for the raw workaround again.
+- Also: `SetCDL` (and color grading generally) behaved more reliably after
+  switching Resolve to the **Color page** (`resolve_control.open_page`,
+  `page: "color"`) first — not confirmed as the actual cause of the
+  `safe_set_cdl` failure above, but did coincide with the raw `set_cdl` call
+  succeeding on retry.
+
+## Real loudness numbers from this phone/mic setup
+
+Footage recorded on the phone in the usual desk setup (see
+`work-with-ai/projects/islamic-study/PROJECT.md`) measures **very quiet**:
+integrated loudness around **-34 LUFS**, true peak around **-11 dBTP**, i.e.
+~20 LU below the -14 LUFS most platforms target, but with the peak already
+much closer to that target than the average is. That gap means a flat
+**Volume** gain on the Resolve timeline item (the only audio control exposed
+by the MCP's `timeline_item.set_audio`) is **not safe** — a static gain big
+enough to fix the average would clip the peaks. Real fix needs dynamic
+loudness normalization (ffmpeg's two-pass `loudnorm`, measure then apply with
+`measured_I`/`measured_TP`/`measured_LRA`/`measured_thresh`), done externally,
+then imported as a separate audio track with the original muted (see Work Log
+below for the exact steps) — Resolve's scriptable audio API has no
+compressor/limiter to do this in-place.
+
+## Network notes (addendum to the ones below)
+
+- `openaipublic.azureedge.net` (Whisper's default model-weight host) and
+  `huggingface.co` model downloads are both extremely throttled on this
+  network (tens of bytes/sec to a few KB/s) — much worse than the general
+  GitHub-release-asset slowness already noted below, and enough to corrupt a
+  large download mid-transfer (hit this with the `base` model — checksum
+  mismatch after a 13+ minute partial download). General internet (Google,
+  PyPI) is fine, so this is CDN/host-specific, not a dead connection.
+- A **`tiny` model (~72MB) already fully downloaded in a prior session**
+  (`~/.cache/whisper/tiny.pt`) loads and works with zero network access —
+  check for an existing cached model before attempting any fresh download on
+  this network. If better accuracy than `tiny` is needed later, try fetching
+  `base`/`small` when this specific CDN is behaving (e.g. test with
+  `curl -r 0-3000000 --max-time 15 <model-url>` first rather than launching
+  the full whisper download blind).
+- **Model loading fine ≠ transcription fast.** Confirmed 2026-08-06: vanilla
+  `openai-whisper` (`tiny`, PyTorch CPU backend) loading the cached
+  `tiny.pt` above still took **78+ minutes and never finished** transcribing
+  an 18-minute clip on this Intel Mac (no GPU, no AVX-optimized build) —
+  had to `kill -9` it. Root cause not fully isolated (possibly whisper's
+  temperature-fallback retry loop on a difficult segment, possibly just slow
+  generic PyTorch CPU inference), but `--condition_on_previous_text False
+  --temperature 0` didn't fix it on retry either. **Use `faster-whisper`
+  (CTranslate2 backend, INT8 CPU quantization) instead of `openai-whisper`
+  for anything beyond a trivial clip** — same model weights conceptually,
+  dramatically faster CPU inference by design. It's what actually worked
+  (once its own model-weight download succeeded) — see the 2026-08-06 Work
+  Log entry.
+- Tried offloading transcription to another machine on the LAN (a Ubuntu
+  server at `192.168.1.127`) hoping for better bandwidth — no faster. That
+  server's download of a `faster-whisper` model from Hugging Face stalled at
+  the same few-KB/s rate as the Mac. This confirms the throttling is
+  network/ISP-level (Cameroon), not specific to one machine — moving to
+  another local box doesn't route around it. A cloud API (pay-per-use,
+  small upload instead of a large model download) is the more reliable
+  fix when this CDN is behaving badly, not switching hardware.
+
 ## Work Log
 
 ### 2026-08-03 — Initial setup
@@ -181,3 +291,71 @@ rather than just fetching the webpage:
   links can actually be downloaded/transcribed, not just fetched as a
   webpage. Also not Resolve-specific, but relevant if we ever pull reference
   clips or source footage from video links into a Resolve project.
+
+### 2026-08-04 — First real edit: color + audio pass on a Quran-memorization clip
+
+Full first end-to-end editing session (not just setup). Project: "Introduction
+to islam" (already existed in Resolve from the 2026-08-03 connection test).
+Source: `~/Downloads/phone raw photage/july/19/20260719_051923.mp4`, 18:23,
+1080p30, phone footage. Content/context logged in
+`work-with-ai/projects/islamic-study/PROJECT.md`.
+
+- Hit the Downloads-folder TCC wall immediately (see new section above) —
+  this drove most of the session's workflow. Worked around it by rendering
+  through Resolve's render queue rather than fighting the permission.
+- Built the real working timeline (`Intro - Quran Memorization Struggle`)
+  from the full source clip. Timeline frame rate is **59.94fps** even though
+  the source is natively 30fps — Resolve conforms on placement, so timeline
+  frame numbers (e.g. `record_frame`) are in 59.94fps terms, not the source's
+  30fps. Worth remembering before doing manual frame-math for clip placement.
+- Applied a corrective CDL grade (see "Color grading API gotcha" above) —
+  pulled down blown highlights on one side of frame, small gamma lift,
+  +5% saturation.
+- Measured real loudness (very quiet phone audio, see "Real loudness numbers"
+  above), produced a corrected track with ffmpeg's two-pass `loudnorm`,
+  added it as a second audio track (`media_pool.append_to_timeline` with
+  `start_frame`/`end_frame`/`record_frame`, since audio needs an explicit
+  source range — plain `clip_ids` isn't enough), muted the original track
+  (`timeline.set_track_enable`), renamed both tracks for clarity. ~1 frame
+  of tail drift between the corrected audio and video (audio ends ~66 frames
+  /~1.1s before video) — acceptable, didn't try to force-stretch it.
+- Ran `silencedetect` on the full audio: only 5 pauses over 1.5-2s in the
+  whole 18 minutes. This content type (continuous spoken narration) doesn't
+  need silence-based auto-trimming — don't reach for it by default on this
+  kind of footage.
+- Transcription: Resolve's native `transcribe_audio` (`MediaPoolItem.
+  TranscribeAudio`) failed on the Downloads-path clip first (looked like the
+  TCC issue again) — but it *also* failed, instantly (~0.4s, no error text),
+  once pointed at an accessible copy, and `timeline_ai.create_subtitles`
+  failed the same instant, silent way. This is a **Free-edition license
+  gate**, not a file-access problem: native AI transcription/subtitles are
+  Studio-only, and the free edition (confirmed elsewhere in this doc) just
+  returns `{"success": false}` with no explanation instead of an informative
+  error. Don't waste time debugging this path on the free edition — go
+  straight to external `whisper`/`faster-whisper`. Always check
+  `job_status` for actual completion rather than trusting
+  `{"success": true, "status": "running"}` alone; quiet failures don't throw.
+- Generated media (corrected audio, later the transcript) permanently stored
+  at `~/Movies/islamic-study-video-production/` — not the git repo (too
+  large), not the session scratchpad (not durable). Relinked the Resolve
+  media pool item to the permanent path with `media_pool_item.replace_clip`
+  after moving the file.
+- Cleaned up disposable multi-GB intermediate renders from scratchpad once
+  their data was extracted (full-quality render used only for loudness
+  measurement/silence detection — no reason to keep it after).
+
+### 2026-08-06 — Final export for actual publish (not just analysis)
+
+- `render.prepare_render_job` refuses a permanent `target_dir` by default
+  (`"target_dir must be under the system temp directory unless
+  require_temp_target=False"`) — same guard as the LUT-export/DRX-apply
+  actions noted elsewhere. Pass `require_temp_target: false` explicitly to
+  render straight to a real destination (e.g. `~/Movies/...`) instead of
+  routing through temp + a manual move.
+- Stale render-queue jobs from earlier analysis renders (this session's
+  scratch exports) persisted in the queue across the whole session —
+  `render.delete_job` each stale `job_id` before `render.start`, or you'll
+  re-render junk alongside the real job.
+- Full 18:23 1080p H.264 final export (graded + corrected-audio timeline)
+  took ~7 minutes on this machine — worth knowing when estimating a
+  publish-day timeline.
