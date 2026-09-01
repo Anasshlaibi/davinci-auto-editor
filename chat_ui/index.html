@@ -656,7 +656,7 @@ let history = [];
 let currentProject = null;
 let currentTimeline = null;
 let timelineClips = [];
-let selectedClipIndex = null;
+let selectedClipIndices = new Set();
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 function loadSettings() {
@@ -834,10 +834,10 @@ function renderClipList() {
   }
 
   listEl.innerHTML = timelineClips.map((c, idx) => {
-    const isSelected = selectedClipIndex === idx;
+    const isSelected = selectedClipIndices.has(idx);
     const durSec = Math.round((c.duration || 0) / 50 * 10) / 10;
     return `
-      <div class="clip-card ${isSelected ? 'active' : ''}" onclick="selectClip(${idx})">
+      <div class="clip-card ${isSelected ? 'active' : ''}" onclick="selectClip(${idx}, event)">
         <div class="clip-index">#${idx + 1}</div>
         <div class="clip-info">
           <div class="clip-name" title="${c.name}">${escapeHtml(c.name)}</div>
@@ -848,27 +848,55 @@ function renderClipList() {
   }).join('');
 }
 
-function selectClip(index) {
-  selectedClipIndex = index;
+function selectClip(index, event) {
+  if (event && (event.ctrlKey || event.metaKey)) {
+    // Toggle on Ctrl / Cmd + Click
+    if (selectedClipIndices.has(index)) {
+      selectedClipIndices.delete(index);
+    } else {
+      selectedClipIndices.add(index);
+    }
+  } else if (event && event.shiftKey && selectedClipIndices.size > 0) {
+    // Range select on Shift + Click
+    const lastSelected = Array.from(selectedClipIndices).pop();
+    const start = Math.min(lastSelected, index);
+    const end = Math.max(lastSelected, index);
+    for (let i = start; i <= end; i++) {
+      selectedClipIndices.add(i);
+    }
+  } else {
+    // Standard click: select single clip
+    selectedClipIndices.clear();
+    selectedClipIndices.add(index);
+  }
+
   renderClipList();
+  updateActiveClipBox();
+}
 
-  const clip = timelineClips[index];
-  if (!clip) return;
-
+function updateActiveClipBox() {
   const box = document.getElementById('active-clip-box');
+  const count = selectedClipIndices.size;
+  if (count === 0) {
+    box.style.display = 'none';
+    return;
+  }
   box.style.display = 'block';
-  document.getElementById('active-clip-label').textContent = `Selected: Clip #${index + 1} (${clip.name})`;
-  document.getElementById('chat-target-label').textContent = `Clip #${index + 1} (${clip.name})`;
+  const indices = Array.from(selectedClipIndices).map(i => `#${i + 1}`).join(', ');
+  const label = count === 1 ? `Selected: Clip ${indices}` : `Selected: ${count} Clips (${indices})`;
+  document.getElementById('active-clip-label').textContent = label;
+  document.getElementById('chat-target-label').textContent = label;
 }
 
 // ── One-Click Direct Actions (Zero Tokens) ───────────────────────────────────
 async function setClipColorDirect(colorName) {
-  if (selectedClipIndex === null) { alert('Select a clip first'); return; }
+  if (selectedClipIndices.size === 0) { alert('Select at least one clip first'); return; }
+  const indices = Array.from(selectedClipIndices);
   try {
-    await callMCPTool('timeline_item', {
+    const res = await callMCPTool('timeline_item', {
       action: 'set_clip_color',
       params: {
-        timeline_item: { track_type: 'video', track_index: 1, item_index: selectedClipIndex },
+        item_indices: indices,
         color: colorName
       }
     });
@@ -879,42 +907,47 @@ async function setClipColorDirect(colorName) {
 }
 
 async function setZoomDirect(val) {
-  if (selectedClipIndex === null) { alert('Select a clip first'); return; }
+  if (selectedClipIndices.size === 0) { alert('Select at least one clip first'); return; }
   try {
-    await callMCPTool('timeline_item', {
-      action: 'set_property',
-      params: {
-        timeline_item: { track_type: 'video', track_index: 1, item_index: selectedClipIndex },
-        key: 'zoom',
-        value: val
-      }
-    });
-    alert(`Zoom set to ${val} on Clip #${selectedClipIndex + 1}!`);
+    for (const idx of selectedClipIndices) {
+      await callMCPTool('timeline_item', {
+        action: 'set_property',
+        params: {
+          timeline_item: { track_type: 'video', track_index: 1, item_index: idx },
+          key: 'zoom',
+          value: val
+        }
+      });
+    }
+    alert(`Zoom set to ${val} on selected clips!`);
   } catch (e) {
     alert('Error setting zoom: ' + e.message);
   }
 }
 
 async function enableDynamicZoomDirect() {
-  if (selectedClipIndex === null) { alert('Select a clip first'); return; }
+  if (selectedClipIndices.size === 0) { alert('Select at least one clip first'); return; }
   try {
-    await callMCPTool('timeline_item', {
-      action: 'set_property',
-      params: {
-        timeline_item: { track_type: 'video', track_index: 1, item_index: selectedClipIndex },
-        key: 'DynamicZoomEase',
-        value: 3
-      }
-    });
-    alert(`Smooth Dynamic Zoom (Ease In/Out) enabled on Clip #${selectedClipIndex + 1}!`);
+    for (const idx of selectedClipIndices) {
+      await callMCPTool('timeline_item', {
+        action: 'set_property',
+        params: {
+          timeline_item: { track_type: 'video', track_index: 1, item_index: idx },
+          key: 'DynamicZoomEase',
+          value: 3
+        }
+      });
+    }
+    alert(`Smooth Dynamic Zoom (Ease In/Out) enabled on selected clips!`);
   } catch (e) {
     alert('Error setting dynamic zoom: ' + e.message);
   }
 }
 
 async function jumpToClipDirect() {
-  if (selectedClipIndex === null) return;
-  const clip = timelineClips[selectedClipIndex];
+  if (selectedClipIndices.size === 0) return;
+  const firstIdx = Array.from(selectedClipIndices)[0];
+  const clip = timelineClips[firstIdx];
   if (!clip || !clip.start) return;
   const totalSec = clip.start / 50;
   const hh = String(Math.floor(totalSec / 3600)).padStart(2, '0');
@@ -927,29 +960,28 @@ async function jumpToClipDirect() {
 }
 
 async function deleteClipDirect() {
-  if (selectedClipIndex === null) { alert('Select a clip first'); return; }
-  const clip = timelineClips[selectedClipIndex];
-  if (!clip || !clip.id) return;
-  if (!confirm(`Delete Clip #${selectedClipIndex + 1} (${clip.name}) and ripple delete?`)) return;
+  if (selectedClipIndices.size === 0) { alert('Select at least one clip first'); return; }
+  const clipIds = Array.from(selectedClipIndices).map(i => timelineClips[i]?.id).filter(Boolean);
+  if (!confirm(`Delete ${clipIds.length} selected clip(s) and ripple delete?`)) return;
 
   try {
     const res = await mcpRpc('tools/call', {
       name: 'timeline',
-      arguments: { action: 'delete_clips', params: { clip_ids: [clip.id], ripple: true } }
+      arguments: { action: 'delete_clips', params: { clip_ids: clipIds, ripple: true } }
     });
     const parsed = JSON.parse(res?.result?.content?.[0]?.text || '{}');
     if (parsed.confirm_token) {
       await mcpRpc('tools/call', {
         name: 'timeline',
-        arguments: { action: 'delete_clips', params: { clip_ids: [clip.id], ripple: true, confirm_token: parsed.confirm_token } }
+        arguments: { action: 'delete_clips', params: { clip_ids: clipIds, ripple: true, confirm_token: parsed.confirm_token } }
       });
     }
-    alert(`Clip #${selectedClipIndex + 1} deleted!`);
-    selectedClipIndex = null;
+    alert(`Selected clips deleted!`);
+    selectedClipIndices.clear();
     document.getElementById('active-clip-box').style.display = 'none';
     refreshTimeline();
   } catch (e) {
-    alert('Error deleting clip: ' + e.message);
+    alert('Error deleting clips: ' + e.message);
   }
 }
 
@@ -1217,9 +1249,12 @@ Project: "${currentProject || 'Untitled'}"
 Timeline: "${currentTimeline || 'Timeline 1'}"
 Total Video 1 Clips: ${timelineClips.length}
 `;
-  if (selectedClipIndex !== null && timelineClips[selectedClipIndex]) {
-    const sc = timelineClips[selectedClipIndex];
-    contextSnippet += `CURRENTLY SELECTED/TARGET CLIP: Clip #${selectedClipIndex + 1} (Name: "${sc.name}", Track: video 1, item_index: ${selectedClipIndex}, duration: ${sc.duration} frames)\n`;
+  if (selectedClipIndices.size > 0) {
+    const list = Array.from(selectedClipIndices).map(i => {
+      const sc = timelineClips[i];
+      return sc ? `Clip #${i + 1} ("${sc.name}", item_index: ${i})` : `Clip #${i + 1}`;
+    }).join(', ');
+    contextSnippet += `CURRENTLY SELECTED/TARGET CLIPS: ${list}\n`;
   }
   contextSnippet += `ALL VIDEO CLIPS ON TRACK 1:\n`;
   timelineClips.forEach((c, i) => {

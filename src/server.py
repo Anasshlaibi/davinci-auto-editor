@@ -21400,8 +21400,30 @@ def timeline_item(action: str, params: Optional[Dict[str, Any]] = None) -> Dict[
         return {"color": item.GetClipColor()}
     elif action == "set_clip_color":
         color = p.get("color") or p.get("clip_color")
-        return {"success": bool(item.SetClipColor(str(color)))} if color else _err("color is required")
+        if not color:
+            return _err("color is required")
+        # Batch support: item_indices list
+        indices = p.get("item_indices") or p.get("indices")
+        if isinstance(indices, list):
+            items_list = tl.GetItemListInTrack(p.get("track_type", "video"), int(p.get("track_index", 1))) or []
+            updated = []
+            for idx in indices:
+                if isinstance(idx, int) and 0 <= idx < len(items_list):
+                    ok = bool(items_list[idx].SetClipColor(str(color)))
+                    updated.append({"item_index": idx, "success": ok})
+            return {"success": True, "updated_count": len(updated), "results": updated}
+        # Fallback to single item
+        return {"success": bool(item.SetClipColor(str(color)))}
     elif action == "clear_clip_color":
+        indices = p.get("item_indices") or p.get("indices")
+        if isinstance(indices, list):
+            items_list = tl.GetItemListInTrack(p.get("track_type", "video"), int(p.get("track_index", 1))) or []
+            cleared = []
+            for idx in indices:
+                if isinstance(idx, int) and 0 <= idx < len(items_list):
+                    ok = bool(items_list[idx].ClearClipColor())
+                    cleared.append({"item_index": idx, "success": ok})
+            return {"success": True, "cleared_count": len(cleared), "results": cleared}
         return {"success": bool(item.ClearClipColor())}
     elif action == "get_duration":
         return {"duration": item.GetDuration()}
