@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DaVinci Resolve — AI Studio & Chat</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg:          #0a0c10;
+    --surface:     #12151c;
+    --surface-2:   #181c26;
+    --border:      #222736;
+    --border-hl:   #3b4258;
+    --accent:      #4f86f7;
+    --accent-glow: rgba(79, 134, 247, 0.25);
+    --accent2:     #9d7cf7;
+    --success:     #22c55e;
+    --warn:        #f59e0b;
+    --danger:      #ef4444;
+    --text:        #f1f5f9;
+    --muted:       #718096;
+    --radius:      12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .logo {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #4f86f7, #9d7cf7);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+    box-shadow: 0 0 16px var(--accent-glow);
+  }
+
+  .header-info h1 { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+  .header-info p  { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+
+  .badge {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #cbd5e1;
+  }
+
+  .header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .btn {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all .2s;
+  }
+  .btn:hover { border-color: var(--accent); background: rgba(79, 134, 247, 0.1); }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover { opacity: 0.9; background: var(--accent); }
+  .btn-danger { color: var(--danger); border-color: rgba(239, 68, 68, 0.3); }
+  .btn-danger:hover { background: rgba(239, 68, 68, 0.1); border-color: var(--danger); }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .status-dot.ok    { background: var(--success); box-shadow: 0 0 8px var(--success); }
+  .status-dot.error { background: var(--danger);  box-shadow: 0 0 8px var(--danger); }
+
+  /* ── Settings Bar ── */
+  #settings {
+    background: #0f1218;
+    border-bottom: 1px solid var(--border);
+    padding: 8px 20px;
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  #settings label { color: var(--muted); }
+  #settings input, #settings select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    outline: none;
+  }
+  #settings input:focus, #settings select:focus { border-color: var(--accent); }
+  #api-key-input { width: 280px; }
+  #token-input   { width: 180px; }
+
+  /* ── Workspace ── */
+  #workspace {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── Left Panel: Visual Studio & Timeline Inspector ── */
+  #studio-panel {
+    width: 440px;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .panel-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Clip Cards */
+  .clip-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 240px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .clip-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all .15s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .clip-card:hover {
+    border-color: var(--border-hl);
+    background: #1d222e;
+  }
+  .clip-card.active {
+    border-color: var(--accent);
+    background: rgba(79, 134, 247, 0.12);
+    box-shadow: 0 0 12px rgba(79, 134, 247, 0.2);
+  }
+
+  .clip-index {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    width: 26px; height: 26px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.06);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .clip-info { flex: 1; min-width: 0; }
+  .clip-name {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #f8fafc;
+  }
+  .clip-meta {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .clip-color-tag {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.2);
+    flex-shrink: 0;
+  }
+
+  /* Clip Controls (Quick Inspector) */
+  .active-clip-box {
+    background: #0f131a;
+    border: 1px solid var(--border-hl);
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 12px;
+  }
+  .active-clip-title {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .quick-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .quick-btn {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    transition: all .15s;
+  }
+  .quick-btn:hover { border-color: var(--accent); color: #fff; }
+
+  /* Color swatch bar */
+  .color-swatches {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    align-items: center;
+  }
+  .color-swatch {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.2);
+    transition: transform .15s;
+  }
+  .color-swatch:hover { transform: scale(1.15); border-color: #fff; }
+
+  /* Tool Cards */
+  .tool-block {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .tool-block-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #f1f5f9;
+  }
+  .tool-desc {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+    margin-bottom: 10px;
+  }
+
+  .tool-inputs {
+    display: flex;
+    gap: 8px;
+  }
+  .tool-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 12px;
+    outline: none;
+  }
+  .tool-input:focus { border-color: var(--accent); }
+
+  /* ── Right Panel: Chat Area ── */
+  #chat-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    position: relative;
+  }
+
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+  }
+
+  .msg { display: flex; gap: 12px; max-width: 920px; width: 100%; }
+  .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .msg.ai   { align-self: flex-start; }
+
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; margin-top: 2px;
+  }
+  .msg.user .avatar { background: linear-gradient(135deg, #4f86f7, #9d7cf7); }
+  .msg.ai   .avatar { background: var(--surface); border: 1px solid var(--border); }
+
+  .bubble {
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    max-width: calc(100% - 44px);
+  }
+  .msg.user .bubble {
+    background: #1b2133;
+    border: 1px solid #2d3752;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.ai .bubble {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+
+  .tool-call {
+    margin-top: 8px;
+    background: #0d1410;
+    border: 1px solid #1e3a29;
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 11px;
+  }
+  .tool-header {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    background: rgba(34, 197, 94, 0.08);
+    border-bottom: 1px solid #1e3a29;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--success);
+    font-weight: 600;
+  }
+  .tool-body {
+    padding: 8px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #94a3b8;
+    white-space: pre-wrap;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  /* ── Input bar ── */
+  #input-area {
+    padding: 14px 20px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  #context-indicator {
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  #input-row {
+    display: flex; gap: 10px; align-items: flex-end;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 8px 12px;
+  }
+  #input-row:focus-within { border-color: var(--accent); }
+
+  #msg-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 13.5px;
+    font-family: 'Inter', sans-serif;
+    resize: none;
+    outline: none;
+    max-height: 120px;
+    line-height: 1.5;
+  }
+
+  .typing { display: flex; gap: 5px; align-items: center; padding: 4px 0; }
+  .typing span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted);
+    animation: bounce .9s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: .15s; }
+  .typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce {
+    0%,60%,100% { transform: translateY(0); }
+    30%          { transform: translateY(-4px); background: var(--accent); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Top Header -->
+<header>
+  <div class="logo">🎬</div>
+  <div class="header-info">
+    <h1>DaVinci Resolve AI Studio</h1>
+    <p>
+      <span id="header-project" class="badge">Project: Connecting…</span>
+      <span id="header-timeline" class="badge">Timeline: —</span>
+      <span id="header-timecode" class="badge">00:00:00:00</span>
+    </p>
+  </div>
+  <div class="header-right">
+    <button class="btn" onclick="refreshTimeline()"><span style="font-size:14px">🔄</span> Refresh Clips</button>
+    <div class="status-pill">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-label">Checking server…</span>
+    </div>
+  </div>
+</header>
+
+<!-- Settings Drawer -->
+<div id="settings">
+  <label>Gemini Key:</label>
+  <input id="api-key-input" type="password" placeholder="AIza…" />
+  <label>Model:</label>
+  <select id="model-select">
+    <option value="gemini-2.5-flash">gemini-2.5-flash (Recommended)</option>
+    <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+    <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+  </select>
+  <label>MCP Token:</label>
+  <input id="token-input" type="text" value="resolve-local-dev-token" />
+  <button class="btn btn-primary" id="save-btn" style="padding: 4px 12px; font-size: 11px;">Save &amp; Connect</button>
+</div>
+
+<!-- Main Workspace -->
+<div id="workspace">
+
+  <!-- Left: Studio Panel (Clips + 1-Click Tools) -->
+  <div id="studio-panel">
+
+    <!-- Section 1: Timeline Clip Strip -->
+    <div class="panel-section">
+      <div class="section-title">
+        <span>Timeline Clips (Video 1)</span>
+        <span id="clip-count-badge" class="badge">0 clips</span>
+      </div>
+      
+      <div class="clip-list" id="clip-list">
+        <div style="color: var(--muted); font-size: 11px; text-align: center; padding: 20px;">
+          Click "Refresh Clips" above to scan timeline items.
+        </div>
+      </div>
+
+      <!-- Active Clip Quick Inspector -->
+      <div class="active-clip-box" id="active-clip-box" style="display: none;">
+        <div class="active-clip-title">
+          <span>🎯</span> <span id="active-clip-label">Selected: Clip #1</span>
+        </div>
+        
+        <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px;">Assign Clip Color:</div>
+        <div class="color-swatches">
+          <div class="color-swatch" style="background:#f97316;" title="Orange" onclick="setClipColorDirect('Orange')"></div>
+          <div class="color-swatch" style="background:#3b82f6;" title="Blue" onclick="setClipColorDirect('Blue')"></div>
+          <div class="color-swatch" style="background:#22c55e;" title="Green" onclick="setClipColorDirect('Green')"></div>
+          <div class="color-swatch" style="background:#eab308;" title="Yellow" onclick="setClipColorDirect('Yellow')"></div>
+          <div class="color-swatch" style="background:#ec4899;" title="Pink" onclick="setClipColorDirect('Pink')"></div>
+          <div class="color-swatch" style="background:#a855f7;" title="Purple" onclick="setClipColorDirect('Purple')"></div>
+          <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="setClipColorDirect('')">Clear</button>
+        </div>
+
+        <div style="font-size: 11px; color: var(--muted); margin-top: 10px; margin-bottom: 4px;">Scale &amp; Dynamics:</div>
+        <div class="quick-grid">
+          <button class="quick-btn" onclick="setZoomDirect(1.0)">Zoom 1.0 (Reset)</button>
+          <button class="quick-btn" onclick="setZoomDirect(1.15)">Zoom 1.15x</button>
+          <button class="quick-btn" onclick="setZoomDirect(1.3)">Zoom 1.30x</button>
+          <button class="quick-btn" onclick="enableDynamicZoomDirect()">Smooth Dynamic Zoom</button>
+          <button class="quick-btn" onclick="jumpToClipDirect()">Jump Playhead</button>
+          <button class="quick-btn" style="color: var(--accent);" onclick="detectSceneCutsDirect()">Detect Scene Cuts</button>
+          <button class="quick-btn" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3); grid-column: span 3;" onclick="deleteClipDirect()">🗑️ Delete Clip (Ripple Delete)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: One-Click Tools (No AI Prompt Tokens Consumed) -->
+    <div class="panel-section">
+      <div class="section-title">⚡ Instant Studio Tools</div>
+
+      <!-- Tool 1: Silence Tools -->
+      <div class="tool-block">
+        <div class="tool-block-header">
+          <span>✂️</span> Silence &amp; Cut Tools
+        </div>
+        <div class="tool-desc">
+          Waveform analysis detects dead pauses in Audio Track 1. You can place cut markers directly on your timeline to blade them yourself, or generate a trimmed timeline.
+        </div>
+        <div style="display: flex; gap: 8px; flex-direction: column;">
+          <button class="btn" style="justify-content: center; background: rgba(79, 134, 247, 0.15); border-color: var(--accent);" id="mark-silence-btn" onclick="markSilenceCutPoints()">
+            📍 Place Cut Markers at Silences (for Ctrl+B Blade)
+          </button>
+          <button class="btn btn-primary" style="justify-content: center;" id="silence-cut-btn" onclick="runSilenceCut()">
+            ⚡ Auto-Cut Silence (Variant Timeline)
+          </button>
+        </div>
+        <div id="silence-feedback" style="font-size: 11px; margin-top: 8px; display: none;"></div>
+      </div>
+
+      <!-- Tool 2: Add Text+ Title -->
+      <div class="tool-block">
+        <div class="tool-block-header">
+          <span>✍️</span> Quick Text+ Title
+        </div>
+        <div class="tool-inputs">
+          <input type="text" id="direct-title-input" class="tool-input" placeholder="Type text for timeline…" value="Creative Edit" />
+          <button class="btn" onclick="insertTitleDirect()">Add Title</button>
+        </div>
+      </div>
+
+      <!-- Tool 3: Playhead Marker -->
+      <div class="tool-block">
+        <div class="tool-block-header">
+          <span>📍</span> Add Playhead Marker
+        </div>
+        <div class="tool-inputs">
+          <input type="text" id="direct-marker-name" class="tool-input" placeholder="Marker note (e.g. Check cut)" />
+          <select id="direct-marker-color" class="tool-input" style="flex: 0 0 90px;">
+            <option value="Blue">Blue</option>
+            <option value="Green">Green</option>
+            <option value="Yellow">Yellow</option>
+            <option value="Red">Red</option>
+            <option value="Cyan">Cyan</option>
+          </select>
+          <button class="btn" onclick="addMarkerDirect()">Mark</button>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Right: AI Chat Panel -->
+  <div id="chat-panel">
+    <div id="chat">
+      <div class="msg ai">
+        <div class="avatar">🎬</div>
+        <div class="bubble">
+          <strong>DaVinci Resolve AI Studio Ready</strong><br/>
+          I have full live access to your running Resolve timeline, clips, Fusion comps, color grades, and render queue.<br/><br/>
+          💡 <strong>What you can do:</strong>
+          <ul style="margin: 6px 0 0 16px; font-size: 12px;">
+            <li>Click any clip on the left to select it, color it, or adjust its zoom.</li>
+            <li>Use the <strong>Auto Silence Ripple Cut</strong> button to instantly strip dead pauses from your timeline.</li>
+            <li>Ask me anything in natural language: <em>"Zoom the 2nd clip by 20%"</em>, <em>"Color the first clip yellow"</em>, or <em>"Add subtitle markers at key moments"</em>.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Bar -->
+    <div id="input-area">
+      <div id="context-indicator">
+        <span>📍 Target:</span> <span id="chat-target-label">All Clips (Timeline 1)</span>
+      </div>
+      <div id="input-row">
+        <textarea id="msg-input" rows="1" placeholder="Tell Resolve what to do… (e.g. 'Zoom the 2nd clip to 1.2x', 'Color clip 1 blue')"></textarea>
+        <button class="btn btn-primary" id="send-btn" title="Send (Enter)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── State & Config ───────────────────────────────────────────────────────────
+const MCP_BASE = 'http://127.0.0.1:8000';
+let MCP_TOKEN  = 'resolve-local-dev-token';
+let GEMINI_KEY = '';
+let GEMINI_MODEL = 'gemini-2.5-flash';
+let mcpSessionId = null;
+
+let mcpTools = [];
+let history = [];
+
+// Live Resolve context
+let currentProject = null;
+let currentTimeline = null;
+let timelineClips = [];
+let selectedClipIndex = null;
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+function loadSettings() {
+  GEMINI_KEY   = localStorage.getItem('gemini_key')   || '';
+  MCP_TOKEN    = localStorage.getItem('mcp_token')    || 'resolve-local-dev-token';
+  GEMINI_MODEL = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
+  document.getElementById('api-key-input').value  = GEMINI_KEY;
+  document.getElementById('token-input').value    = MCP_TOKEN;
+  document.getElementById('model-select').value   = GEMINI_MODEL;
+}
+
+document.getElementById('save-btn').addEventListener('click', async () => {
+  GEMINI_KEY   = document.getElementById('api-key-input').value.trim();
+  MCP_TOKEN    = document.getElementById('token-input').value.trim();
+  GEMINI_MODEL = document.getElementById('model-select').value;
+  localStorage.setItem('gemini_key',   GEMINI_KEY);
+  localStorage.setItem('mcp_token',    MCP_TOKEN);
+  localStorage.setItem('gemini_model', GEMINI_MODEL);
+  await connectMCP();
+  await refreshTimeline();
+});
+
+// ── MCP Protocol ─────────────────────────────────────────────────────────────
+function mcpHeaders() {
+  const h = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${MCP_TOKEN}`,
+    'Accept': 'application/json, text/event-stream',
+  };
+  if (mcpSessionId) h['Mcp-Session-Id'] = mcpSessionId;
+  return h;
+}
+
+async function mcpRpc(method, params = {}) {
+  const payload = { jsonrpc: '2.0', id: Date.now(), method, params };
+  const res = await fetch(`${MCP_BASE}/mcp`, {
+    method: 'POST',
+    headers: mcpHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const sid = res.headers.get('mcp-session-id');
+  if (sid) mcpSessionId = sid;
+  if (!res.ok && res.status !== 200) throw new Error(`MCP HTTP ${res.status}: ${await res.text()}`);
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('text/event-stream')) return await readSSEResponse(res);
+  return await res.json();
+}
+
+async function readSSEResponse(res) {
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (line.startsWith('data:')) {
+        const data = line.slice(5).trim();
+        if (data && data !== '[DONE]') {
+          try { return JSON.parse(data); } catch {}
+        }
+      }
+    }
+  }
+  return null;
+}
+
+async function connectMCP() {
+  setStatus('checking');
+  mcpSessionId = null;
+  try {
+    const initResp = await mcpRpc('initialize', {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'resolve-ai-studio', version: '2.0' },
+    });
+    if (!initResp || initResp.error) {
+      setStatus('error', initResp?.error?.message || 'Initialize failed');
+      return;
+    }
+    fetch(`${MCP_BASE}/mcp`, {
+      method: 'POST',
+      headers: mcpHeaders(),
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+    }).catch(() => {});
+
+    const listResp = await mcpRpc('tools/list');
+    if (listResp?.result?.tools) {
+      mcpTools = listResp.result.tools;
+      setStatus('ok', `${mcpTools.length} tools · Resolve Studio Live`);
+    } else {
+      setStatus('error', 'tools/list failed');
+    }
+  } catch (e) {
+    setStatus('error', 'Server offline (run start_chat_server.ps1)');
+    console.error(e);
+  }
+}
+
+async function callMCPTool(name, args) {
+  const resp = await mcpRpc('tools/call', { name, arguments: args });
+  if (!resp) return 'ERROR: No response from server';
+  if (resp.error) return `ERROR: ${resp.error.message}`;
+  const result = resp.result;
+  if (!result) return 'ERROR: Empty result';
+  if (result.isError) {
+    const msg = Array.isArray(result.content)
+      ? result.content.map(c => c.text || JSON.stringify(c)).join('\n')
+      : JSON.stringify(result);
+    return `ERROR from Resolve: ${msg}`;
+  }
+  if (Array.isArray(result.content)) {
+    return result.content.map(c => c.text || JSON.stringify(c)).join('\n');
+  }
+  return JSON.stringify(result, null, 2);
+}
+
+function setStatus(state, label) {
+  const dot = document.getElementById('status-dot');
+  const lbl = document.getElementById('status-label');
+  dot.className = 'status-dot ' + (state === 'ok' ? 'ok' : state === 'error' ? 'error' : '');
+  lbl.textContent = label || (state === 'ok' ? 'Connected' : 'Offline');
+}
+
+// ── Visual Timeline & Clip Inspector ─────────────────────────────────────────
+async function refreshTimeline() {
+  try {
+    // 1. Get current project info
+    const projResp = await mcpRpc('tools/call', { name: 'project_manager', arguments: { action: 'get_current' } });
+    if (projResp?.result?.content?.[0]?.text) {
+      try {
+        const pData = JSON.parse(projResp.result.content[0].text);
+        currentProject = pData.name || 'Untitled';
+        document.getElementById('header-project').textContent = `Project: ${currentProject}`;
+      } catch {}
+    }
+
+    // 2. Get current timecode
+    const tcResp = await mcpRpc('tools/call', { name: 'timeline', arguments: { action: 'get_current_timecode' } });
+    if (tcResp?.result?.content?.[0]?.text) {
+      try {
+        const tcData = JSON.parse(tcResp.result.content[0].text);
+        if (tcData.timecode) document.getElementById('header-timecode').textContent = tcData.timecode;
+      } catch {}
+    }
+
+    // 3. Get all items on Video Track 1
+    const itemsResp = await mcpRpc('tools/call', {
+      name: 'timeline',
+      arguments: { action: 'get_items', params: { track_type: 'video', index: 1 } }
+    });
+
+    if (itemsResp?.result?.content?.[0]?.text) {
+      const parsed = JSON.parse(itemsResp.result.content[0].text);
+      timelineClips = parsed.items || [];
+      document.getElementById('header-timeline').textContent = `Timeline: Timeline 1`;
+      renderClipList();
+    }
+  } catch (e) {
+    console.error('Error refreshing timeline:', e);
+  }
+}
+
+function renderClipList() {
+  const listEl = document.getElementById('clip-list');
+  const badgeEl = document.getElementById('clip-count-badge');
+  badgeEl.textContent = `${timelineClips.length} clips`;
+
+  if (!timelineClips.length) {
+    listEl.innerHTML = `<div style="color: var(--muted); font-size: 11px; text-align: center; padding: 20px;">No video clips found on Track 1.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = timelineClips.map((c, idx) => {
+    const isSelected = selectedClipIndex === idx;
+    const durSec = Math.round((c.duration || 0) / 50 * 10) / 10;
+    return `
+      <div class="clip-card ${isSelected ? 'active' : ''}" onclick="selectClip(${idx})">
+        <div class="clip-index">#${idx + 1}</div>
+        <div class="clip-info">
+          <div class="clip-name" title="${c.name}">${escapeHtml(c.name)}</div>
+          <div class="clip-meta">${c.duration} frames · ~${durSec}s · Start: ${c.start}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function selectClip(index) {
+  selectedClipIndex = index;
+  renderClipList();
+
+  const clip = timelineClips[index];
+  if (!clip) return;
+
+  const box = document.getElementById('active-clip-box');
+  box.style.display = 'block';
+  document.getElementById('active-clip-label').textContent = `Selected: Clip #${index + 1} (${clip.name})`;
+  document.getElementById('chat-target-label').textContent = `Clip #${index + 1} (${clip.name})`;
+}
+
+// ── One-Click Direct Actions (Zero Tokens) ───────────────────────────────────
+async function setClipColorDirect(colorName) {
+  if (selectedClipIndex === null) { alert('Select a clip first'); return; }
+  try {
+    await callMCPTool('timeline_item', {
+      action: 'set_clip_color',
+      params: {
+        timeline_item: { track_type: 'video', track_index: 1, item_index: selectedClipIndex },
+        color: colorName
+      }
+    });
+    refreshTimeline();
+  } catch (e) {
+    alert('Error setting clip color: ' + e.message);
+  }
+}
+
+async function setZoomDirect(val) {
+  if (selectedClipIndex === null) { alert('Select a clip first'); return; }
+  try {
+    await callMCPTool('timeline_item', {
+      action: 'set_property',
+      params: {
+        timeline_item: { track_type: 'video', track_index: 1, item_index: selectedClipIndex },
+        key: 'zoom',
+        value: val
+      }
+    });
+    alert(`Zoom set to ${val} on Clip #${selectedClipIndex + 1}!`);
+  } catch (e) {
+    alert('Error setting zoom: ' + e.message);
+  }
+}
+
+async function enableDynamicZoomDirect() {
+  if (selectedClipIndex === null) { alert('Select a clip first'); return; }
+  try {
+    await callMCPTool('timeline_item', {
+      action: 'set_property',
+      params: {
+        timeline_item: { track_type: 'video', track_index: 1, item_index: selectedClipIndex },
+        key: 'DynamicZoomEase',
+        value: 3
+      }
+    });
+    alert(`Smooth Dynamic Zoom (Ease In/Out) enabled on Clip #${selectedClipIndex + 1}!`);
+  } catch (e) {
+    alert('Error setting dynamic zoom: ' + e.message);
+  }
+}
+
+async function jumpToClipDirect() {
+  if (selectedClipIndex === null) return;
+  const clip = timelineClips[selectedClipIndex];
+  if (!clip || !clip.start) return;
+  const totalSec = clip.start / 50;
+  const hh = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+  const mm = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+  const ss = String(Math.floor(totalSec % 60)).padStart(2, '0');
+  const ff = String(Math.floor(clip.start % 50)).padStart(2, '0');
+  const tc = `${hh}:${mm}:${ss}:${ff}`;
+  await callMCPTool('timeline', { action: 'set_current_timecode', params: { timecode: tc } });
+  document.getElementById('header-timecode').textContent = tc;
+}
+
+async function deleteClipDirect() {
+  if (selectedClipIndex === null) { alert('Select a clip first'); return; }
+  const clip = timelineClips[selectedClipIndex];
+  if (!clip || !clip.id) return;
+  if (!confirm(`Delete Clip #${selectedClipIndex + 1} (${clip.name}) and ripple delete?`)) return;
+
+  try {
+    const res = await mcpRpc('tools/call', {
+      name: 'timeline',
+      arguments: { action: 'delete_clips', params: { clip_ids: [clip.id], ripple: true } }
+    });
+    const parsed = JSON.parse(res?.result?.content?.[0]?.text || '{}');
+    if (parsed.confirm_token) {
+      await mcpRpc('tools/call', {
+        name: 'timeline',
+        arguments: { action: 'delete_clips', params: { clip_ids: [clip.id], ripple: true, confirm_token: parsed.confirm_token } }
+      });
+    }
+    alert(`Clip #${selectedClipIndex + 1} deleted!`);
+    selectedClipIndex = null;
+    document.getElementById('active-clip-box').style.display = 'none';
+    refreshTimeline();
+  } catch (e) {
+    alert('Error deleting clip: ' + e.message);
+  }
+}
+
+async function detectSceneCutsDirect() {
+  try {
+    await callMCPTool('timeline_ai', { action: 'detect_scene_cuts' });
+    alert('Scene cut detection complete! Sliced video at scene changes.');
+    refreshTimeline();
+  } catch (e) {
+    alert('Error detecting scene cuts: ' + e.message);
+  }
+}
+
+async function markSilenceCutPoints() {
+  const btn = document.getElementById('mark-silence-btn');
+  const fb  = document.getElementById('silence-feedback');
+  btn.disabled = true;
+  fb.style.display = 'block';
+  fb.style.color = 'var(--muted)';
+  fb.textContent = '⏳ Analyzing audio waveform for silence gaps…';
+
+  try {
+    const planResp = await mcpRpc('tools/call', {
+      name: 'edit_engine',
+      arguments: { action: 'plan_silence_ripple', params: { track_index: 1 } }
+    });
+    const text = planResp?.result?.content?.[0]?.text;
+    const plan = JSON.parse(text);
+    const lifts = plan.lifts || [];
+
+    if (!plan.success || !lifts.length) {
+      fb.style.color = 'var(--warn)';
+      fb.textContent = 'No silence pauses detected on audio track 1.';
+      btn.disabled = false;
+      return;
+    }
+
+    fb.textContent = `Placing cut markers for ${lifts.length} silence gaps onto timeline…`;
+    let count = 0;
+    for (let i = 0; i < lifts.length; i++) {
+      const l = lifts[i];
+      const st = l.timeline_start_frame;
+      const en = l.timeline_end_frame;
+      const dur = Math.round((l.duration_seconds || 0) * 10) / 10;
+      await callMCPTool('timeline_markers', {
+        action: 'add',
+        params: { frame: st, color: 'Cyan', name: `Cut Silence #${i+1}`, note: `Pause: ${dur}s` }
+      });
+      await callMCPTool('timeline_markers', {
+        action: 'add',
+        params: { frame: en, color: 'Cyan', name: `End Silence #${i+1}`, note: 'Resume' }
+      });
+      count += 2;
+    }
+
+    fb.style.color = 'var(--success)';
+    fb.innerHTML = `✅ <strong>Placed ${count} Cut Markers!</strong><br/>In Resolve: Jump through them (Down Arrow) and hit <code>Ctrl + B</code> to blade each pause.`;
+    btn.disabled = false;
+    refreshTimeline();
+  } catch (e) {
+    fb.style.color = 'var(--danger)';
+    fb.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+// Silence Cut Tool
+async function runSilenceCut() {
+  const btn = document.getElementById('silence-cut-btn');
+  const fb  = document.getElementById('silence-feedback');
+  btn.disabled = true;
+  fb.style.display = 'block';
+  fb.style.color = 'var(--muted)';
+  fb.textContent = '⏳ Analyzing audio waveform for silences with ffmpeg…';
+
+  try {
+    const planResp = await mcpRpc('tools/call', {
+      name: 'edit_engine',
+      arguments: { action: 'plan_silence_ripple', params: { track_index: 1 } }
+    });
+
+    const text = planResp?.result?.content?.[0]?.text;
+    const plan = JSON.parse(text);
+
+    if (!plan.success || !plan.plan_id) {
+      fb.style.color = 'var(--danger)';
+      fb.textContent = 'Failed to analyze silences: ' + (plan.error || 'Unknown error');
+      btn.disabled = false;
+      return;
+    }
+
+    const lifts = plan.lift_count || 0;
+    const sec   = Math.round(plan.estimated_removed_seconds || 0);
+
+    fb.innerHTML = `
+      <div style="background: rgba(79, 134, 247, 0.1); border: 1px solid var(--accent); border-radius: 6px; padding: 8px;">
+        <strong>✅ Detected ${lifts} dead silence gaps (~${sec}s total).</strong><br/>
+        <span style="font-size: 10px; color: var(--muted);">Click Confirm to create a trimmed variant timeline.</span><br/>
+        <button class="btn btn-primary" style="margin-top: 8px; font-size: 11px; padding: 4px 10px;" id="confirm-silence-btn">
+          ✂️ Confirm &amp; Ripple Cut
+        </button>
+      </div>
+    `;
+
+    document.getElementById('confirm-silence-btn').onclick = async () => {
+      fb.textContent = 'Creating silence-free timeline in Resolve…';
+      const exec1 = await mcpRpc('tools/call', {
+        name: 'edit_engine',
+        arguments: { action: 'execute_silence_ripple', params: { plan_id: plan.plan_id } }
+      });
+      const res1 = JSON.parse(exec1.result.content[0].text);
+      if (res1.confirm_token) {
+        await mcpRpc('tools/call', {
+          name: 'edit_engine',
+          arguments: { action: 'execute_silence_ripple', params: { plan_id: plan.plan_id, confirm_token: res1.confirm_token } }
+        });
+      }
+      fb.style.color = 'var(--success)';
+      fb.innerHTML = `🎉 <strong>Success!</strong> Created trimmed timeline without silence in Resolve.`;
+      btn.disabled = false;
+      refreshTimeline();
+    };
+
+  } catch (e) {
+    fb.style.color = 'var(--danger)';
+    fb.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+// Quick Title Insert
+async function insertTitleDirect() {
+  const val = document.getElementById('direct-title-input').value.trim();
+  if (!val) return;
+  try {
+    await callMCPTool('timeline', { action: 'insert_fusion_title', params: { name: 'Text+' } });
+    await callMCPTool('fusion_comp', { action: 'set_text_plus', params: { text: val } });
+    alert(`Inserted Text+ title: "${val}" onto timeline!`);
+    refreshTimeline();
+  } catch (e) {
+    alert('Error inserting title: ' + e.message);
+  }
+}
+
+// Quick Marker Add
+async function addMarkerDirect() {
+  const note = document.getElementById('direct-marker-name').value.trim() || 'Marker';
+  const color = document.getElementById('direct-marker-color').value;
+  try {
+    await callMCPTool('timeline_markers', {
+      action: 'add',
+      params: { name: note, color: color, note: note }
+    });
+    alert(`Added ${color} marker: "${note}" at playhead!`);
+  } catch (e) {
+    alert('Error adding marker: ' + e.message);
+  }
+}
+
+// ── Gemini Integration (With Automatic Timeline Knowledge) ───────────────────
+function sanitizeSchema(schema) {
+  if (!schema || typeof schema !== 'object') return schema;
+  if (Array.isArray(schema)) return schema.map(sanitizeSchema);
+  const out = {};
+  const ALLOWED = new Set(['type','description','properties','required','enum','items','nullable']);
+  const variant = schema.anyOf || schema.oneOf || schema.allOf;
+  if (variant) {
+    const nonNull = variant.filter(s => s.type !== 'null' && s !== null);
+    const hasNull = variant.some(s => s.type === 'null' || s === null);
+    const base    = nonNull.length === 1 ? sanitizeSchema(nonNull[0]) : { type: 'string' };
+    if (hasNull) base.nullable = true;
+    return base;
+  }
+  for (const [k, v] of Object.entries(schema)) {
+    if (!ALLOWED.has(k)) continue;
+    if (k === 'properties' && v && typeof v === 'object') {
+      out.properties = Object.fromEntries(
+        Object.entries(v).map(([pk, pv]) => [pk, sanitizeSchema(pv)])
+      );
+    } else if (k === 'items') {
+      out.items = sanitizeSchema(v);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+function buildGeminiTools() {
+  if (!mcpTools.length) return [];
+  return [{
+    functionDeclarations: mcpTools.map(t => ({
+      name: t.name,
+      description: (t.description || t.name).slice(0, 500),
+      parameters: sanitizeSchema(t.inputSchema) || { type: 'object', properties: {} },
+    }))
+  }];
+}
+
+async function geminiChat(userText) {
+  if (!GEMINI_KEY) throw new Error('Enter your Gemini API key in settings above.');
+
+  let contextSnippet = `LIVE RESOLVE CONTEXT:
+Project: "${currentProject || 'Untitled'}"
+Timeline: "${currentTimeline || 'Timeline 1'}"
+Total Video 1 Clips: ${timelineClips.length}
+`;
+  if (selectedClipIndex !== null && timelineClips[selectedClipIndex]) {
+    const sc = timelineClips[selectedClipIndex];
+    contextSnippet += `CURRENTLY SELECTED/TARGET CLIP: Clip #${selectedClipIndex + 1} (Name: "${sc.name}", Track: video 1, item_index: ${selectedClipIndex}, duration: ${sc.duration} frames)\n`;
+  }
+  contextSnippet += `ALL VIDEO CLIPS ON TRACK 1:\n`;
+  timelineClips.forEach((c, i) => {
+    contextSnippet += `  - Clip #${i + 1}: "${c.name}" (item_index: ${i}, start: ${c.start}, duration: ${c.duration} frames)\n`;
+  });
+
+  const promptWithContext = `${contextSnippet}\nUSER REQUEST: ${userText}`;
+  history.push({ role: 'user', parts: [{ text: promptWithContext }] });
+
+  const systemInstruction = {
+    parts: [{
+      text: `You are an expert DaVinci Resolve assistant with direct control over the running DaVinci Resolve session.
+
+CRITICAL OPERATING RULES:
+1. When the user mentions "the 1st clip", "the 2nd clip", "this clip", etc., look at the LIVE RESOLVE CONTEXT provided with each message. Map "Clip #1" to item_index: 0, "Clip #2" to item_index: 1, etc. NEVER ask "which clip" when clip indices are in your context.
+2. For zooming/scaling: use timeline_item(action='set_property', params={'timeline_item': {'track_type': 'video', 'track_index': 1, 'item_index': <idx>}, 'key': 'zoom', 'value': <num>}).
+3. For smooth Dynamic Zoom on the Edit page: set key='DynamicZoomEase', value=3 (Ease In/Out).
+4. For custom Text titles:
+   - Insert: timeline(action='insert_fusion_title', name='Text+')
+   - Set Text: fusion_comp(action='set_text_plus', params={'text': '<text>'})
+5. For clip color: timeline_item(action='set_clip_color', params={'timeline_item': {'track_type': 'video', 'track_index': 1, 'item_index': <idx>}, 'color': 'Orange|Blue|Green|Yellow|Pink'}).
+6. Resolve API does NOT have a Play button. Instruct the user to hit Spacebar in Resolve.
+7. For cutting/deleting:
+   - To ripple-delete a clip: timeline(action='delete_clips', params={'clip_ids': [<id>], 'ripple': true}).
+   - To cut at scene changes: timeline_ai(action='detect_scene_cuts').
+   - For silence pauses: Resolve's API doesn't have an automated Blade keypress (Ctrl+B), but you can place Cut Markers at all pause points so the user can blade them, or plan a silence ripple via edit_engine.
+8. Always execute real tools and report results. Never fabricate results.`
+    }]
+  };
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`;
+
+  let maxTurns = 8;
+  while (maxTurns-- > 0) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: systemInstruction,
+        contents: history,
+        tools: buildGeminiTools(),
+        generationConfig: { temperature: 0.2 },
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Gemini HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const candidate = data.candidates?.[0];
+    if (!candidate) throw new Error('No answer from Gemini');
+
+    const modelParts = candidate.content?.parts || [];
+    history.push({ role: 'model', parts: modelParts });
+
+    const textParts = modelParts.filter(p => p.text);
+    const fnCalls   = modelParts.filter(p => p.functionCall);
+
+    if (fnCalls.length === 0) {
+      return { text: textParts.map(p => p.text).join(''), toolCalls: [] };
+    }
+
+    const toolResults = [];
+    const toolSummaries = [];
+    for (const fc of fnCalls) {
+      const mcpName = fc.functionCall.name;
+      const args    = fc.functionCall.args || {};
+      let result;
+      try {
+        result = await callMCPTool(mcpName, args);
+      } catch (e) {
+        result = `Tool error: ${e.message}`;
+      }
+      toolSummaries.push({ name: mcpName, args, result });
+      toolResults.push({
+        functionResponse: {
+          name: fc.functionCall.name,
+          response: { result },
+        }
+      });
+    }
+
+    history.push({ role: 'user', parts: toolResults });
+    if (maxTurns === 0) return { text: textParts.map(p => p.text).join(''), toolCalls: toolSummaries };
+    renderIntermediate(textParts.map(p => p.text).join(''), toolSummaries);
+  }
+}
+
+// ── UI Rendering Helpers ─────────────────────────────────────────────────────
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderMarkdown(text) {
+  return text
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => `<pre><code>${escapeHtml(code.trim())}</code></pre>`)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br/>');
+}
+
+function addMessage(role, html, toolCalls = []) {
+  const chat = document.getElementById('chat');
+  const div  = document.createElement('div');
+  div.className = `msg ${role}`;
+  const avatar = role === 'user' ? '👤' : '🎬';
+  let toolsHtml = '';
+  for (const tc of toolCalls) {
+    const argsStr = JSON.stringify(tc.args, null, 2);
+    const resStr  = typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result, null, 2);
+    toolsHtml += `
+      <div class="tool-call">
+        <div class="tool-header">⚡ ${escapeHtml(tc.name)}</div>
+        <div class="tool-body">Args: ${escapeHtml(argsStr)}\n\nResult: ${escapeHtml(resStr.slice(0, 800))}</div>
+      </div>`;
+  }
+  div.innerHTML = `<div class="avatar">${avatar}</div><div class="bubble">${html}${toolsHtml}</div>`;
+  chat.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  return div;
+}
+
+let typingEl = null;
+function showTyping() {
+  const chat = document.getElementById('chat');
+  typingEl = document.createElement('div');
+  typingEl.className = 'msg ai';
+  typingEl.innerHTML = `<div class="avatar">🎬</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  chat.appendChild(typingEl);
+  typingEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+function hideTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
+
+function renderIntermediate(text, toolCalls) {
+  hideTyping();
+  if (text || toolCalls.length) addMessage('ai', text ? renderMarkdown(text) : '', toolCalls);
+  showTyping();
+}
+
+async function doSend(text) {
+  if (!text.trim()) return;
+  const input = document.getElementById('msg-input');
+  const btn   = document.getElementById('send-btn');
+  input.value = '';
+  btn.disabled = true;
+
+  addMessage('user', escapeHtml(text));
+  showTyping();
+
+  try {
+    const { text: reply, toolCalls } = await geminiChat(text);
+    hideTyping();
+    addMessage('ai', renderMarkdown(reply), toolCalls);
+    refreshTimeline();
+  } catch (e) {
+    hideTyping();
+    addMessage('ai', `<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`);
+  } finally {
+    btn.disabled = false;
+    input.focus();
+  }
+}
+
+document.getElementById('send-btn').addEventListener('click', () => {
+  doSend(document.getElementById('msg-input').value);
+});
+
+document.getElementById('msg-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    doSend(e.target.value);
+  }
+});
+
+// ── Startup ──────────────────────────────────────────────────────────────────
+loadSettings();
+connectMCP().then(() => {
+  refreshTimeline();
+});
+</script>
+</body>
+</html>

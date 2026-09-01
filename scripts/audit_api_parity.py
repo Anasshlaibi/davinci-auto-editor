@@ -49,7 +49,7 @@ def parse_documented_methods(docs_path: Path) -> Dict[str, Set[str]]:
     """
     classes: Dict[str, Set[str]] = {}
     current_class: str | None = None
-    text = docs_path.read_text()
+    text = docs_path.read_text(encoding="utf-8")
     # Truncate at the first deprecation marker
     for marker in ("\nDeprecated Resolve API Functions",
                    "\nUnsupported Resolve API Functions"):

@@ -11,7 +11,7 @@ GRANULAR_DIR = PROJECT_ROOT / "src" / "granular"
 
 
 def _parse(path: Path) -> ast.AST:
-    return ast.parse(path.read_text())
+    return ast.parse(path.read_text(encoding="utf-8"))
 
 
 def _is_mcp_tool_decorator(decorator: ast.expr) -> bool:
@@ -98,7 +98,7 @@ class McpSdkPinTest(unittest.TestCase):
         # lets a fresh install resolve to 2.x. Conditional on server.py's
         # import so the guard retires itself when the server is ported to the
         # 2.x layout, rather than blocking that port.
-        server_src = (PROJECT_ROOT / "src" / "server.py").read_text()
+        server_src = (PROJECT_ROOT / "src" / "server.py").read_text(encoding="utf-8")
         if "from mcp.server.fastmcp import" not in server_src:
             self.skipTest("server.py no longer imports mcp.server.fastmcp")
 
@@ -114,7 +114,7 @@ class McpSdkPinTest(unittest.TestCase):
         ]
         specs += [
             line.strip()
-            for line in (PROJECT_ROOT / "requirements.txt").read_text().splitlines()
+            for line in (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
             if line.strip().startswith("mcp[cli]")
         ]
         self.assertGreaterEqual(
@@ -131,7 +131,7 @@ class McpSdkPinTest(unittest.TestCase):
 
 
 def test_npm_package_metadata():
-    package = json.loads((PROJECT_ROOT / "package.json").read_text())
+    package = json.loads((PROJECT_ROOT / "package.json").read_text(encoding="utf-8"))
     assert package["name"] == "davinci-resolve-mcp"
     assert package["version"] == _string_assignment(PROJECT_ROOT / "install.py", "VERSION")
     assert package["bin"]["davinci-resolve-mcp"] == "./bin/davinci-resolve-mcp.mjs"
@@ -150,7 +150,7 @@ def test_compound_tool_count():
 
 
 def test_prompt_registrations():
-    source = (PROJECT_ROOT / "src" / "server.py").read_text()
+    source = (PROJECT_ROOT / "src" / "server.py").read_text(encoding="utf-8")
     # 2 baseline (davinci_resolve_workflow + analyze_media) + 5 F2 workflow prompts
     # + 7 per-domain workflow routers.
     assert source.count("@mcp.prompt") == 14

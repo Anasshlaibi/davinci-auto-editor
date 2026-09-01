@@ -2534,10 +2534,18 @@ def _resolve_fusion_comp(p: Dict[str, Any], require_timeline_scope: bool = False
         return _get_fusion_comp_on_timeline_item(item, p)
 
     fusion = r.Fusion()
-    if not fusion:
-        return None, _err("Fusion not available — switch to the Fusion page first")
-    comp = fusion.GetCurrentComp()
+    comp = fusion.GetCurrentComp() if fusion else None
     if not comp:
+        # Auto-fallback: check current timeline for items with Fusion compositions (e.g. Text+ titles)
+        _, tl, _ = _get_tl()
+        if tl:
+            cur_item = tl.GetCurrentVideoItem()
+            if cur_item and (cur_item.GetFusionCompCount() or 0) > 0:
+                return _get_fusion_comp_on_timeline_item(cur_item, p)
+            for track_idx in range(1, int(tl.GetTrackCount("video") or 1) + 1):
+                for it in (tl.GetItemListInTrack("video", track_idx) or []):
+                    if (it.GetFusionCompCount() or 0) > 0:
+                        return _get_fusion_comp_on_timeline_item(it, p)
         return None, _err(
             "No active Fusion composition. Open a clip in the Fusion page first, "
             "or pass clip_id, timeline_item_id, or timeline_item={track_type, track_index, item_index} "
@@ -20787,10 +20795,10 @@ def timeline(action: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, 
         return _ok() if r else _err("Failed to insert OFX generator")
     elif action == "insert_title":
         r = tl.InsertTitleIntoTimeline(p["name"])
-        return _ok() if r else _err("Failed to insert title")
+        return _ok() if r else _err(f"Failed to insert title '{p.get('name')}'. Note: 'name' must be a valid title template from Resolve's Effects library (e.g. 'Text', 'Text+', 'Scroll'), not arbitrary text.")
     elif action == "insert_fusion_title":
         r = tl.InsertFusionTitleIntoTimeline(p["name"])
-        return _ok() if r else _err("Failed to insert Fusion title")
+        return _ok() if r else _err(f"Failed to insert Fusion title '{p.get('name')}'. Note: 'name' must be a valid Fusion Title template from Resolve's Effects library (e.g. 'Text+'), not arbitrary text.")
     elif action == "get_unique_id":
         return {"id": tl.GetUniqueId()}
     elif action == "get_node_graph":
@@ -21330,12 +21338,45 @@ def timeline_item(action: str, params: Optional[Dict[str, Any]] = None) -> Dict[
     elif action == "get_property":
         return {"properties": _ser(item.GetProperty(p.get("key", "")))}
     elif action == "set_property":
-        err, _clean = _validate_params(p, {"key": {"type": str, "required": True, "non_empty": True}})
-        if err:
-            return _err(err)
-        if "value" not in p:
-            return _err("'value' is required")
-        return {"success": bool(item.SetProperty(p["key"], p["value"]))}
+        key = p.get("key") or p.get("property_name") or p.get("property") or p.get("name")
+        if not key:
+            return _err("'key' (or 'property_name') is required")
+        if "value" not in p and "property_value" not in p:
+            return _err("'value' (or 'property_value') is required")
+        val = p.get("value") if "value" in p else p.get("property_value")
+
+        # Map common synonyms to official Resolve property names
+        KEY_MAP = {
+            "scale": "ZoomX", "zoom": "ZoomX",
+            "scale x": "ZoomX", "scalex": "ZoomX", "zoomx": "ZoomX",
+            "scale y": "ZoomY", "scaley": "ZoomY", "zoomy": "ZoomY",
+            "pan": "Pan", "tilt": "Tilt", "opacity": "Opacity",
+            "rotation": "RotationAngle", "rotationangle": "RotationAngle", "angle": "RotationAngle",
+            "pitch": "Pitch", "yaw": "Yaw", "dynamiczoom": "DynamicZoomEase", "dynamiczoomease": "DynamicZoomEase",
+            "cropleft": "CropLeft", "cropright": "CropRight", "croptop": "CropTop", "cropbottom": "CropBottom",
+        }
+        clean_key = KEY_MAP.get(str(key).lower(), key)
+
+        ok = bool(item.SetProperty(clean_key, val))
+        # If zoom was requested and ZoomGang is on, keep ZoomY synced with ZoomX
+        if ok and str(key).lower() in ("scale", "zoom", "zoomx", "scalex"):
+            try:
+                if bool(item.GetProperty("ZoomGang")):
+                    item.SetProperty("ZoomY", val)
+            except Exception:
+                pass
+
+        if not ok:
+            valid_keys = list((item.GetProperty() or {}).keys())
+            return _err(f"SetProperty('{clean_key}', {val}) failed. Valid keys for this item: {valid_keys}")
+        return {"success": True, "property": clean_key, "value": val}
+    elif action == "get_clip_color":
+        return {"color": item.GetClipColor()}
+    elif action == "set_clip_color":
+        color = p.get("color") or p.get("clip_color")
+        return {"success": bool(item.SetClipColor(str(color)))} if color else _err("color is required")
+    elif action == "clear_clip_color":
+        return {"success": bool(item.ClearClipColor())}
     elif action == "get_duration":
         return {"duration": item.GetDuration()}
     elif action == "get_start":

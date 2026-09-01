@@ -107,8 +107,30 @@ def run_networked(mcp, transport):
     mcp.settings.port = port
     token, generated = resolve_token()
 
+    # Browsers send Origin: null when loading from a file:// URL.
+    # Append "null" to the SDK's existing loopback allowlist so the
+    # DNS-rebinding middleware doesn't reject our local chat UI.
+    if hasattr(mcp, "settings") and hasattr(mcp.settings, "transport_security"):
+        ts = mcp.settings.transport_security
+        if "null" not in ts.allowed_origins:
+            ts.allowed_origins.append("null")
+
     app = mcp.sse_app() if transport == "sse" else mcp.streamable_http_app()
     app.add_middleware(_auth_middleware_cls(token))
+
+
+
+    # Allow the local file:// chat UI (and any localhost origin) to call us.
+    # CORS is safe here because auth is still enforced by the bearer middleware above.
+    from starlette.middleware.cors import CORSMiddleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],          # loopback-only bind; wildcard is fine locally
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+
 
     if host not in LOOPBACK_HOSTS:
         logger.warning(
