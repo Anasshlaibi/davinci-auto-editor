@@ -19350,6 +19350,32 @@ def edit_engine(action: str, params: Optional[Dict[str, Any]] = None) -> Dict[st
             max_hits=int(p.get("max_hits", p.get("maxHits", 200))),
         )
 
+    if action == "mark_silences":
+        _r, proj, project_root, err = _project_context(need_resolve=True)
+        if err:
+            return err
+        from src.auto_editor import marker_cutter
+        return marker_cutter.mark_silences_on_timeline(
+            resolve=_r,
+            audio_file_path=p.get("audio_file_path"),
+            threshold_db=float(p.get("threshold_db", -32.0)),
+            min_duration=float(p.get("min_duration", 0.3)),
+            start_marker_color=str(p.get("start_marker_color", "Red")),
+            end_marker_color=str(p.get("end_marker_color", "Blue")),
+        )
+
+    if action == "cut_from_markers":
+        _r, proj, project_root, err = _project_context(need_resolve=True)
+        if err:
+            return err
+        from src.auto_editor import marker_cutter
+        return marker_cutter.execute_cuts_from_markers(
+            resolve=_r,
+            start_marker_color=str(p.get("start_marker_color", "Red")),
+            end_marker_color=str(p.get("end_marker_color", "Blue")),
+            new_timeline_suffix=str(p.get("new_timeline_suffix", "Auto Cut")),
+        )
+
     if action == "plan_silence_ripple":
         _r, proj, project_root, err = _project_context(need_resolve=True)
         if err:
